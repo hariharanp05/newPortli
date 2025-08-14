@@ -6,6 +6,7 @@ urlpatterns = [
     path('verify-otp/', views.verify_otp, name='verifyotp'),
     path('login/', views.login_view, name='login'),
      # ✅ Forgot/Reset password
+      path('token/refresh/', views.refresh_token, name='token_refresh'),
     path('forgot-password/', views.forgot_password, name='forgot_password'),
     path('reset-password/', views.reset_password, name='reset_password'),
     path('api/dashboard/', views.dashboard_view, name='dashboard'),

@@ -1,6 +1,7 @@
-from mongoengine import Document, StringField, BooleanField, EmailField, DateTimeField
+from mongoengine import Document, StringField, BooleanField, EmailField, DateTimeField, UUIDField
 from django.contrib.auth.hashers import make_password, check_password
 import datetime
+import uuid
 
 class UserManager:
     def create_user(self, email, password=None, **extra_fields):
@@ -34,6 +35,7 @@ class UserManager:
 
 
 class User(Document):
+    id = UUIDField(primary_key=True, default=uuid.uuid4, binary=False)
     email = EmailField(required=True, unique=True)
     username = StringField(max_length=50, required=True, unique=True, sparse=True)
     full_name = StringField(max_length=100, required=True)

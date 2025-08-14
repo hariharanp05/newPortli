@@ -3,30 +3,37 @@ from django.core.mail import send_mail
 from django.conf import settings
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.authtoken.models import Token
 from mongoengine.errors import DoesNotExist
 from .models import User
 from .serializers import RegisterSerializer, ForgotPasswordSerializer, ResetPasswordSerializer
 from django.contrib.auth.hashers import check_password
 # views.py
 from rest_framework.permissions import IsAuthenticated
-
+from rest_framework.permissions import AllowAny
+from uuid import UUID
 import jwt
-from datetime import datetime, timedelta
+from .utils import generate_tokens_for_user
 
 
-def generate_jwt(user):
-    payload = {
-        "user_id": str(user.id),
-        "email": user.email,
-        "exp": datetime.utcnow() + timedelta(hours=1),  # token expires in 1 hour
-        "iat": datetime.utcnow()
-    }
-    token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
-    return token
+
 
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
+def refresh_token(request):
+    from rest_framework_simplejwt.tokens import RefreshToken
+    refresh_token_str = request.data.get("refresh")
+    if not refresh_token_str:
+        return Response({"error": "Refresh token required"}, status=400)
+    try:
+        refresh = RefreshToken(refresh_token_str)
+        new_access = refresh.access_token
+        return Response({"access": str(new_access)}, status=200)
+    except Exception:
+        return Response({"error": "Invalid or expired refresh token"}, status=401)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
 def register(request):
     
     
@@ -74,6 +81,7 @@ def register(request):
 
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def verify_otp(request):
     email = request.data.get("email")
     otp = request.data.get("otp")
@@ -105,6 +113,7 @@ def verify_otp(request):
 
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def login_view(request):
     email_or_username = request.data.get('email') or request.data.get('username')
     password = request.data.get('password')
@@ -135,24 +144,19 @@ def login_view(request):
             print(f"[LOGIN FAILED] Unverified email: {email_or_username}")
         return Response({"message": "Please verify your email first"}, status=403)
 
-    # Token auth requires a Django user instance. Since you're using MongoEngine,
-    # this will likely fail unless you extend Django's `AbstractBaseUser`.
-    # ❌ Token.objects.get_or_create(user=user) will raise an error
-    # ✅ Suggest switching to JWT instead for compatibility, or implement custom token system.
-    
-    
-    token = generate_jwt(user)
+   
+    tokens = generate_tokens_for_user(user)
+
     return Response({
         "message": "Login successful",
-        "token": token,
+        "access": tokens["access"],
+        "refresh": tokens["refresh"],
         "user": {
             "username": user.username,
             "email": user.email,
-            "id": str(user.id),
-            # "token": "JWT or custom token here"  # You’ll need a workaround here.
+            "id": str(user.id)
         }
     }, status=200)
-
 
 def get_user_from_token(request):
     auth_header = request.headers.get('Authorization')
@@ -161,7 +165,8 @@ def get_user_from_token(request):
     token = auth_header.split(' ')[1]
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
-        return User.objects(id=payload['user_id']).first()
+        user_id = UUID(payload['user_id'])  # convert string to UUID
+        return User.objects(payload[user_id]).first()
     except jwt.ExpiredSignatureError:
         return None
     except jwt.InvalidTokenError:
@@ -177,6 +182,7 @@ def get_user_from_token(request):
 
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def forgot_password(request):
     serializer = ForgotPasswordSerializer(data=request.data)
     if serializer.is_valid():
@@ -208,6 +214,7 @@ def forgot_password(request):
 
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def reset_password(request):
     serializer = ResetPasswordSerializer(data=request.data)
     if serializer.is_valid():

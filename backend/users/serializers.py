@@ -5,6 +5,7 @@ from django.contrib.auth.hashers import make_password
 
 
 class RegisterSerializer(DocumentSerializer):
+    id = serializers.SerializerMethodField(read_only=True)  # ✅ Output id as string
     password = serializers.CharField(
         write_only=True,
         required=True,
@@ -21,6 +22,9 @@ class RegisterSerializer(DocumentSerializer):
             'full_name': {'required': True},
         }
 
+    def get_id(self, obj):
+        return str(obj.id)  # ✅ Convert ObjectId to string
+    
     def validate_email(self, value):
         value = value.lower()
         if User.objects(email=value).first():
