@@ -33,7 +33,8 @@ class Certification(EmbeddedDocument):
     description = StringField()
 
 class Portfolio(Document):
-    user = ReferenceField(User, required=True, unique=True)
+    user_id = StringField(required=True, unique=True)  # ✅ store Django user.id as string
+    username = StringField(required=True, unique=True)
     
     # Basic Info
     full_name = StringField()

@@ -49,110 +49,77 @@ def get_public_portfolio(request, username):
 
 
     try:
-        user_obj = User.objects.get(username=username)
-    except User.DoesNotExist:
-        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-
-    try:
-        portfolio = Portfolio.objects.get(user=user_obj.id)
+        # Directly fetch portfolio using username
+        portfolio = Portfolio.objects.get(username=username)
     except Portfolio.DoesNotExist:
         return Response({'error': 'Public portfolio not found'}, status=status.HTTP_404_NOT_FOUND)
 
     # Convert ObjectId to string for JSON
     portfolio_data = convert_objectid(portfolio.to_mongo().to_dict())
     return Response(portfolio_data, status=status.HTTP_200_OK)
-    
-    
-    
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def create_portfolio(request):
+def save_portfolio(request):
+    user_id = str(request.user.id)
+    data = request.data
     user = request.user
 
-    # Prevent duplicate portfolio
-    if Portfolio.objects(user=user).first():
-        return Response({'error': 'Portfolio already exists'}, status=400)
-
-    data = request.data
     try:
-        portfolio = Portfolio(
-            user=user,
-            full_name=data.get('full_name'),
-            title=data.get('title'),
-            profile_image=data.get('profile_image'),
-            short_bio=data.get('short_bio'),
-            email=data.get('email'),
-            phone=data.get('phone'),
-            about_me=data.get('about_me'),
-            social_links=data.get('social_links', {}),
-            education=data.get('education', []),
-            experience=data.get('experience', []),
-            skills=data.get('skills', []),
-            projects=data.get('projects', []),
-            certifications=data.get('certifications', []),
-            show_email=data.get('show_email', True),
-            show_contact_form=data.get('show_contact_form', True),
-            contact_message=data.get('contact_message'),
-            layout=data.get('layout', {}),
+        # This will update if portfolio exists, otherwise create new one
+        portfolio = Portfolio.objects(user_id=user_id).modify(
+            upsert=True,           # create if not exists
+            new=True,              # return the new doc
+            set__username=user.username, 
+            set__full_name=data.get('full_name'),
+            set__title=data.get('title'),
+            set__profile_image=data.get('profile_image'),
+            set__short_bio=data.get('short_bio'),
+            set__email=data.get('email'),
+            set__phone=data.get('phone'),
+            set__about_me=data.get('about_me'),
+            set__social_links=data.get('social_links', {}),
+            set__education=data.get('education', []),
+            set__experience=data.get('experience', []),
+            set__skills=data.get('skills', []),
+            set__projects=data.get('projects', []),
+            set__certifications=data.get('certifications', []),
+            set__show_email=data.get('show_email', True),
+            set__show_contact_form=data.get('show_contact_form', True),
+            set__contact_message=data.get('contact_message'),
+            set__layout=data.get('layout', {}),
         )
         portfolio.save()
-        return Response({'message': 'Portfolio created'}, status=201)
+        return Response({'message': 'Portfolio saved successfully'}, status=200)
+
     except Exception as e:
         return Response({'error': str(e)}, status=500)
+
+
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_portfolio_by_user(request):
-    user = request.user
-    portfolio = Portfolio.objects(user=user).first()
+    user_id = str(request.user.id)
+    portfolio = Portfolio.objects(user_id=user_id).first()
     if not portfolio:
-        return Response(None, status=200)
-    portfolio_json = json.loads(portfolio.to_json())
-    return Response(portfolio_json, status=200)
-
-@api_view(['PUT'])
-@permission_classes([IsAuthenticated])
-def update_portfolio(request, portfolio_id):
-    try:
-        portfolio = Portfolio.objects.get(id=portfolio_id, user=request.user)
-    except Portfolio.DoesNotExist:
         return Response({'error': 'Portfolio not found'}, status=404)
 
-    data = request.data
+    # Convert to dict and fix ObjectId
+    data = portfolio.to_mongo().to_dict()
+    data['_id'] = str(data['_id'])   # make JSON serializable
 
-    # Update fields
-    
-    # Normal fields
-    for field in ['full_name', 'title', 'profile_image', 'short_bio', 'email', 'phone',
-                  'about_me', 'social_links', 'show_email', 'show_contact_form', 'contact_message', 'layout']:
-        if field in data:
-            setattr(portfolio, field, data[field])
+    return Response(data, status=200)
 
-    # Embedded fields
-    if 'education' in data:
-        portfolio.education = [Education(**edu) for edu in data['education']]
-
-    if 'experience' in data:
-        portfolio.experience = [Experience(**exp) for exp in data['experience']]
-
-    if 'skills' in data:
-        portfolio.skills = [Skill(**sk) for sk in data['skills']]
-
-    if 'projects' in data:
-        portfolio.projects = [Project(**proj) for proj in data['projects']]
-
-    if 'certifications' in data:
-        portfolio.certifications = [Certification(**cert) for cert in data['certifications']]
-
-
-    portfolio.save()
-    return Response({'message': 'Portfolio updated successfully'}, status=200)
 
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
-def delete_portfolio(request, portfolio_id):
+def delete_portfolio(request, user_id):
+    user_id = str(request.user.id)
     try:
-        portfolio = Portfolio.objects.get(id=portfolio_id, user=request.user)
+        portfolio = Portfolio.objects.get(user_id=user_id)
         portfolio.delete()
         return Response({'message': 'Portfolio deleted'}, status=200)
     except Portfolio.DoesNotExist:
